@@ -1,7 +1,6 @@
-#include "menu.h"
+#include "Menu.h"
 #include <iostream>
 #include <string>
-#include <vector>
 
 #ifdef _WIN32
 #include <conio.h>
@@ -13,131 +12,148 @@
 
 using namespace std;
 
+string storedText = "";
 
-int getKey() {
-#ifdef _WIN32
-    return _getch();
-#else
-    termios oldt, newt;
-    tcgetattr(STDIN_FILENO, &oldt);
-
-    newt = oldt;
-    newt.c_lflag &= ~(ICANON | ECHO);
-    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
-
-    int ch = getchar();
-
-    if (ch == 27 && getchar() == 91)  // arrow prefix
-        ch = getchar();
-
-    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-    return ch;
-#endif
-}
-
-
+// ---------- Console helpers ----------
 void clearScreen() {
 #ifdef _WIN32
     system("cls");
 #else
-    cout << "\033[2J\033[H";
+    cout << "\033[2J\033[H"; // clear screen + move cursor top-left
 #endif
+    cout.flush();
 }
 
 void goToXY(int x, int y) {
 #ifdef _WIN32
-    COORD pos = { (SHORT)x, (SHORT)y };
+    COORD pos{ (SHORT)x, (SHORT)y };
     SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), pos);
 #else
-    cout << "\033[" << (y + 1) << ";" << (x + 1) << "H";
+    cout << "\033[" << (y+1) << ";" << (x+1) << "H";
 #endif
 }
 
+// Single char input cross-platform
+char getChar() {
+#ifdef _WIN32
+    return _getch();
+#else
+    struct termios oldt, newt;
+    char c;
+    tcgetattr(STDIN_FILENO, &oldt);
+    newt = oldt;
+    newt.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
 
-void drawMenu(const vector<string>& items, int selected) {
-    clearScreen();
+    c = getchar();
 
-    cout << "======== MENU ========\n";
-    for (int i = 0; i < items.size(); i++) {
-        if (i == selected)
-            cout << " > " << items[i] << "\n";
-        else
-            cout << "   " << items[i] << "\n";
-    }
-    cout << "======================\n";
-    cout << "↑↓ to move | Enter select | ESC exit\n";
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+    return c;
+#endif
 }
 
-void runNew(string &stored) {
-    clearScreen();
-    cout << "Enter text (Enter = save, Backspace = cancel):\n\n";
+// Arrow/Home/End/Enter/ESC
+int getKey() {
+#ifdef _WIN32
+    int c = _getch();
+    if (c == 224) c = 1000 + _getch(); // special keys
+    return c;
+#else
+    struct termios oldt, newt;
+    tcgetattr(STDIN_FILENO, &oldt);
+    newt = oldt;
+    newt.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
 
-    string s;
+    int c = getchar();
+    if (c == 27) { // ESC sequences
+        if (getchar() == '[') {
+            int n = getchar();
+            c = 1000 + n;
+        }
+    }
+
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+    return c;
+#endif
+}
+
+// ---------- Menu functions ----------
+void drawMenu(const string items[], int count, int selected) {
+    clearScreen();
+    cout << "======== MENU ========\n";
+    for (int i = 0; i < count; i++) {
+        if (i == selected) cout << " > " << items[i] << "\n";
+        else cout << "   " << items[i] << "\n";
+    }
+    cout << "======================\n";
+    cout << "↑↓ move | Enter select | ESC exit | Home New | End Exit\n";
+}
+
+void runNew() {
+    goToXY(0, 6);
+    cout << "Enter text (Enter=save, Backspace=delete, ESC=cancel):\n> ";
+    string input;
     bool running = true;
 
     while (running) {
-        int c = getKey();
+        char c = getChar();
 
-        if (c == 127 || c == 8) {
-            running = false;   // cancel
-        }
-        else if (c == 13 || c == 10) {
-            stored = s;        // save
+        if (c == 27) { // ESC cancel
             running = false;
         }
+        else if (c == 10 || c == 13) { // Enter save
+            storedText = input;
+            running = false;
+        }
+        else if (c == 8 || c == 127) { // Backspace
+            if (!input.empty()) {
+                input.pop_back();
+                cout << "\b \b";
+            }
+        }
         else {
-            s += (char)c;
-            cout << (char)c;
+            input += c;
+            cout << c;
         }
     }
 }
 
-
-void runDisplay(const string &stored) {
+void runDisplay() {
     clearScreen();
+    if (storedText.empty()) cout << "No stored text.\n";
+    else cout << "Stored text: " << storedText << "\n";
 
-    if (stored.empty())
-        cout << "No text stored.\n\n";
-    else {
-        cout << "Stored text:\n";
-        cout << stored << "\n\n";
-    }
-
-    cout << "Press Enter or Backspace to return...";
-
-    while (true) {
-        int c = getKey();
-        if (c == 13 || c == 10 || c == 127 || c == 8)
-            return;
+    cout << "\nPress ENTER to return...";
+    bool waiting = true;
+    while (waiting) {
+        int k = getKey();
+        if (k == 10 || k == 13) waiting = false;
     }
 }
-
 
 void runMenu() {
-    vector<string> items = { "New", "Display", "Exit" };
+    const string items[] = { "New", "Display", "Exit" };
+    const int count = 3;
     int selected = 0;
-    string storedText = "";
+    bool running = true;
 
-    while (true) {
-        drawMenu(items, selected);
+    while (running) {
+        drawMenu(items, count, selected);
         int k = getKey();
 
-        if (k == 27)  // ESC
-            return;
-
-        if (k == 'H' || k == 65) // up
-            selected = (selected - 1 + items.size()) % items.size();
-
-        else if (k == 'P' || k == 66) // down
-            selected = (selected + 1) % items.size();
-
-        else if (k == 13 || k == 10) { // ENTER
-            if (items[selected] == "New")
-                runNew(storedText);
-            else if (items[selected] == "Display")
-                runDisplay(storedText);
-            else if (items[selected] == "Exit")
-                return;
+        if (k == 27) running = false;               // ESC
+        else if (k == 1000+65 || k == 72)           // Up
+            selected = (selected - 1 + count) % count;
+        else if (k == 1000+66 || k == 80)           // Down
+            selected = (selected + 1) % count;
+        else if (k == 1000+72) selected = 0;        // Home → New
+        else if (k == 1000+70) selected = count-1;  // End → Exit
+        else if (k == 10 || k == 13) {              // Enter
+            if (items[selected] == "New") runNew();
+            else if (items[selected] == "Display") runDisplay();
+            else running = false;                    // Exit
         }
     }
+    clearScreen(); 
 }

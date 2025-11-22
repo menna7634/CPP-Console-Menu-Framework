@@ -14,12 +14,12 @@ using namespace std;
 
 string storedText = "";
 
-// ---------- Console helpers ----------
+
 void clearScreen() {
 #ifdef _WIN32
     system("cls");
 #else
-    cout << "\033[2J\033[H"; // clear screen + move cursor top-left
+    cout << "\033[2J\033[H"; 
 #endif
     cout.flush();
 }
@@ -33,7 +33,6 @@ void goToXY(int x, int y) {
 #endif
 }
 
-// Single char input cross-platform
 char getChar() {
 #ifdef _WIN32
     return _getch();
@@ -56,7 +55,7 @@ char getChar() {
 int getKey() {
 #ifdef _WIN32
     int c = _getch();
-    if (c == 224) c = 1000 + _getch(); // special keys
+    if (c == 224) c = 1000 + _getch(); 
     return c;
 #else
     struct termios oldt, newt;
@@ -66,7 +65,7 @@ int getKey() {
     tcsetattr(STDIN_FILENO, TCSANOW, &newt);
 
     int c = getchar();
-    if (c == 27) { // ESC sequences
+    if (c == 27) { 
         if (getchar() == '[') {
             int n = getchar();
             c = 1000 + n;
